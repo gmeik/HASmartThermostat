@@ -11,17 +11,19 @@ _LOGGER = logging.getLogger(__name__)
 class PID:
     error: float
 
-    def __init__(self, kp, ki, kd, ke=0, out_min=float('-inf'), out_max=float('+inf'), sampling_period=0,
+    def __init__(self, kp, ti, td, ke=0, outdoor_sensor_offset=0, out_min=float('-inf'), out_max=float('+inf'), sampling_period=0,
                  cold_tolerance=0.3, hot_tolerance=0.3):
         """A proportional-integral-derivative controller.
             :param kp: Proportional coefficient.
             :type kp: float
-            :param ki: Integral coefficient.
-            :type ki: float
-            :param kd: Derivative coefficient.
-            :type kd: float
+            :param ti: Integral time.
+            :type ti: float
+            :param td: Derivative time.
+            :type td: float
             :param ke: Outdoor temperature compensation coefficient.
             :type ke: float
+            :param outdoor_sensor_offset: Outdoor temperature offset
+            :type outdoor_sensor_offset: float
             :param out_min: Lower output limit.
             :type out_min: float
             :param out_max: Upper output limit.
@@ -35,17 +37,18 @@ class PID:
         """
         if kp is None:
             raise ValueError('kp must be specified')
-        if ki is None:
-            raise ValueError('ki must be specified')
-        if kd is None:
-            raise ValueError('kd must be specified')
+        if ti is None:
+            raise ValueError('ti must be specified')
+        if td is None:
+            raise ValueError('td must be specified')
         if out_min >= out_max:
             raise ValueError('out_min must be less than out_max')
 
         self._Kp = kp
-        self._Ki = ki
-        self._Kd = kd
+        self._Ti = ti
+        self._Td = td
         self._Ke = ke
+        self._outdoor_sensor_offset = outdoor_sensor_offset
         self._out_min = out_min
         self._out_max = out_max
         self._integral = 0.0
@@ -89,16 +92,21 @@ class PID:
         self._integral = i
         self.I = i
 
-    def set_pid_param(self, kp=None, ki=None, kd=None, ke=None):
+    def set_pid_param(self, kp=None, ti=None, td=None, ke=None):
         """Set PID parameters."""
         if kp is not None and isinstance(kp, (int, float)):
             self._Kp = kp
-        if ki is not None and isinstance(ki, (int, float)):
-            self._Ki = ki
-        if kd is not None and isinstance(kd, (int, float)):
-            self._Kd = kd
+        if ti is not None and isinstance(ti, (int, float)):
+            self._Ti = ti
+        if td is not None and isinstance(td, (int, float)):
+            self._Td = td
         if ke is not None and isinstance(ke, (int, float)):
             self._Ke = ke
+
+    def set_outdoor_sensor_offset(self, outdoor_sensor_offset=None):
+        """Set outdoor temperature sensor offset."""
+        if outdoor_sensor_offset is not None and isinstance(outdoor_sensor_offset, (int, float)):
+            self._outdoor_sensor_offset = outdoor_sensor_offset
 
     def clear_samples(self):
         """Clear the samples values and timestamp to restart PID from clean state after
@@ -165,7 +173,7 @@ class PID:
         else:
             self.dt = 0
         if ext_temp is not None:
-            self.dext = set_point - ext_temp
+            self.dext = set_point - (ext_temp + self._outdoor_sensor_offset)
         else:
             self.dext = 0
 
@@ -173,13 +181,13 @@ class PID:
         # is stable
         if self._out_min < self._last_output < self._out_max and \
                 self._last_set_point == self._set_point:
-            self._integral += self._Ki * self.error * self.dt
+            self._integral += self._Kp / self._Ti * self.error * self.dt
             self._integral = max(min(self._integral, self._out_max), self._out_min)
 
         self.P = self._Kp * self.error
         self.I = self._integral
         if self.dt != 0:
-            self.D = -(self._Kd * self._input_diff) / self.dt
+            self.D = -(self._Kp * self._Td * self._input_diff) / self.dt
         else:
             self.D = 0.0
         # Compensate losses due to external temperature
@@ -216,7 +224,7 @@ class PIDAutotune:
             overshoot/undershoot the setpoint before the state changes.
         time (function): A function which returns the current time in seconds.
     """
-    PIDParams = namedtuple('PIDParams', ['Kp', 'Ki', 'Kd'])
+    PIDParams = namedtuple('PIDParams', ['Kp', 'Ti', 'Td'])
 
     PEAK_AMPLITUDE_TOLERANCE = 0.05
     STATE_OFF = 'off'
@@ -226,7 +234,7 @@ class PIDAutotune:
     STATE_FAILED = 'failed'
 
     _tuning_rules = {
-        # rule: [Kp_divisor, Ki_divisor, Kd_divisor]
+        # rule: [Kp_divisor, Ti_divisor, Td_divisor]
         "ziegler-nichols": [34, 40, 160],
         "tyreus-luyben": [44,  9, 126],
         "ciancone-marlin": [66, 88, 162],
@@ -320,9 +328,9 @@ class PIDAutotune:
         """
         divisors = self._tuning_rules[tuning_rule]
         kp = self._Ku / divisors[0]
-        ki = kp / (self._Pu / divisors[1])
-        kd = kp * (self._Pu / divisors[2])
-        return PIDAutotune.PIDParams(kp, ki, kd)
+        ti = self._Pu / divisors[1]
+        td = self._Pu / divisors[2]
+        return PIDAutotune.PIDParams(kp, ti, td)
 
     def run(self, input_val, set_point, now=None):
         """To autotune a system, this method must be called periodically.

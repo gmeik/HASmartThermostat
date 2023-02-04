@@ -115,9 +115,10 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         ),
         vol.Optional(const.CONF_DIFFERENCE, default=const.DEFAULT_DIFFERENCE): vol.Coerce(float),
         vol.Optional(const.CONF_KP, default=const.DEFAULT_KP): vol.Coerce(float),
-        vol.Optional(const.CONF_KI, default=const.DEFAULT_KI): vol.Coerce(float),
-        vol.Optional(const.CONF_KD, default=const.DEFAULT_KD): vol.Coerce(float),
+        vol.Optional(const.CONF_TI, default=const.DEFAULT_TI): vol.Coerce(float),
+        vol.Optional(const.CONF_TD, default=const.DEFAULT_TD): vol.Coerce(float),
         vol.Optional(const.CONF_KE, default=const.DEFAULT_KE): vol.Coerce(float),
+        vol.Optional(const.CONF_OUTDOOR_SENSOR_OFFSET, default=const.DEFAULT_OUTDOOR_SENSOR_OFFSET): vol.Coerce(float),
         vol.Optional(const.CONF_PWM, default=const.DEFAULT_PWM): vol.All(
             cv.time_period, cv.positive_timedelta
         ),
@@ -173,9 +174,10 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         'unit': hass.config.units.temperature_unit,
         'difference': config.get(const.CONF_DIFFERENCE),
         'kp': config.get(const.CONF_KP),
-        'ki': config.get(const.CONF_KI),
-        'kd': config.get(const.CONF_KD),
+        'ti': config.get(const.CONF_TI),
+        'td': config.get(const.CONF_TD),
         'ke': config.get(const.CONF_KE),
+        'outdoor_sensor_offset': config.get(const.CONF_OUTDOOR_SENSOR_OFFSET),
         'pwm': config.get(const.CONF_PWM),
         'boost_pid_off': config.get(const.CONF_BOOST_PID_OFF),
         'autotune': config.get(const.CONF_AUTOTUNE),
@@ -191,11 +193,18 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         "set_pid_gain",
         {
             vol.Optional("kp"): vol.Coerce(float),
-            vol.Optional("ki"): vol.Coerce(float),
-            vol.Optional("kd"): vol.Coerce(float),
+            vol.Optional("ti"): vol.Coerce(float),
+            vol.Optional("td"): vol.Coerce(float),
             vol.Optional("ke"): vol.Coerce(float),
         },
         "async_set_pid",
+    )
+    platform.async_register_entity_service(  # type: ignore
+        "set_outdoor_sensor_offset",
+        {
+            vol.Optional("outdoor_sensor_offset"): vol.Coerce(float),
+        },
+        "async_set_outdoor_sensor_offset",
     )
     platform.async_register_entity_service(  # type: ignore
         "set_pid_mode",
@@ -254,7 +263,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
         self._temp_precision = kwargs.get('precision')
         self._target_temperature_step = kwargs.get('target_temp_step')
         self._debug = kwargs.get(const.CONF_DEBUG)
-        self._last_heat_cycle_time = time.time()
+        self._last_on_time = time.time()
+        self._last_off_time = time.time()
         self._min_on_cycle_duration_pid_on = kwargs.get('min_cycle_duration')
         self._min_off_cycle_duration_pid_on = kwargs.get('min_off_cycle_duration')
         self._min_on_cycle_duration_pid_off = kwargs.get('min_cycle_duration_pid_off')
@@ -306,9 +316,10 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
             self._min_out = 0
             self._max_out = self._difference
         self._kp = kwargs.get('kp')
-        self._ki = kwargs.get('ki')
-        self._kd = kwargs.get('kd')
+        self._ti = kwargs.get('ti')
+        self._td = kwargs.get('td')
         self._ke = kwargs.get('ke')
+        self._outdoor_sensor_offset = kwargs.get('outdoor_sensor_offset')
         self._pwm = kwargs.get('pwm').seconds
         self._p = self._i = self._d = self._e = self._dt = 0
         self._control_output = 0
@@ -343,9 +354,9 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
                             "after doesn't have any effect until autotuning is finished",
                             self._name, self._unique_id)
         else:
-            _LOGGER.debug("PID Gains for %s (%s): kp = %s, ki = %s, kd = %s", self._name,
-                          self._unique_id, self._kp, self._ki, self._kd)
-            self._pid_controller = pid_controller.PID(self._kp, self._ki, self._kd, self._ke,
+            _LOGGER.debug("PID Gains for %s (%s): kp = %s, ti = %s, td = %s", self._name,
+                          self._unique_id, self._kp, self._ti, self._td)
+            self._pid_controller = pid_controller.PID(self._kp, self._ti, self._td, self._ke, self._outdoor_sensor_offset,
                                                       self._min_out, self._max_out,
                                                       self._sampling_period, self._cold_tolerance,
                                                       self._hot_tolerance)
@@ -411,24 +422,27 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
             elif old_state.attributes.get('Kp') is not None and self._pid_controller is not None:
                 self._kp = float(old_state.attributes.get('Kp'))
                 self._pid_controller.set_pid_param(kp=self._kp)
-            if old_state.attributes.get('ki') is not None and self._pid_controller is not None:
-                self._ki = float(old_state.attributes.get('ki'))
-                self._pid_controller.set_pid_param(ki=self._ki)
-            elif old_state.attributes.get('Ki') is not None and self._pid_controller is not None:
-                self._ki = float(old_state.attributes.get('Ki'))
-                self._pid_controller.set_pid_param(ki=self._ki)
-            if old_state.attributes.get('kd') is not None and self._pid_controller is not None:
-                self._kd = float(old_state.attributes.get('kd'))
-                self._pid_controller.set_pid_param(kd=self._kd)
-            elif old_state.attributes.get('Kd') is not None and self._pid_controller is not None:
-                self._kd = float(old_state.attributes.get('Kd'))
-                self._pid_controller.set_pid_param(kd=self._kd)
+            if old_state.attributes.get('ti') is not None and self._pid_controller is not None:
+                self._ti = float(old_state.attributes.get('ti'))
+                self._pid_controller.set_pid_param(ti=self._ti)
+            elif old_state.attributes.get('Ti') is not None and self._pid_controller is not None:
+                self._ti = float(old_state.attributes.get('Ti'))
+                self._pid_controller.set_pid_param(ti=self._ti)
+            if old_state.attributes.get('td') is not None and self._pid_controller is not None:
+                self._td = float(old_state.attributes.get('td'))
+                self._pid_controller.set_pid_param(td=self._td)
+            elif old_state.attributes.get('Td') is not None and self._pid_controller is not None:
+                self._td = float(old_state.attributes.get('Td'))
+                self._pid_controller.set_pid_param(td=self._td)
             if old_state.attributes.get('ke') is not None and self._pid_controller is not None:
                 self._ke = float(old_state.attributes.get('ke'))
                 self._pid_controller.set_pid_param(ke=self._ke)
             elif old_state.attributes.get('Ke') is not None and self._pid_controller is not None:
                 self._ke = float(old_state.attributes.get('Ke'))
                 self._pid_controller.set_pid_param(ke=self._ke)
+            if old_state.attributes.get('outdoor_sensor_offset') is not None and self._pid_controller is not None:
+                self._outdoor_sensor_offset = float(old_state.attributes.get('outdoor_sensor_offset'))
+                self._pid_controller.set_outdoor_sensor_offset(outdoor_sensor_offset=self._outdoor_sensor_offset)
             if old_state.attributes.get('pid_mode') is not None and \
                     self._pid_controller is not None:
                 self._pid_controller.mode = old_state.attributes.get('pid_mode')
@@ -567,7 +581,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
     @property
     def pid_parm(self):
         """Return the pid parameters of the thermostat."""
-        return self._kp, self._ki, self._kd
+        return self._kp, self._ti, self._td
 
     @property
     def pid_control_p(self):
@@ -614,9 +628,10 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
             'activity_temp': self._activity_temp,
             "control_output": self._control_output,
             "kp": self._kp,
-            "ki": self._ki,
-            "kd": self._kd,
+            "ti": self._ti,
+            "td": self._td,
             "ke": self._ke,
+            "outdoor_sensor_offset": self._outdoor_sensor_offset,
             "pid_mode": self.pid_mode,
             "pid_i": 0 if self._autotune != "none" else self.pid_control_i,
         }
@@ -691,18 +706,26 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
     async def async_set_pid(self, **kwargs):
         """Set PID parameters."""
         gain_kp = kwargs.get('kp', None)
-        gain_ki = kwargs.get('ki', None)
-        gain_kd = kwargs.get('kd', None)
+        gain_ti = kwargs.get('ti', None)
+        gain_td = kwargs.get('td', None)
         gain_ke = kwargs.get('ke', None)
         if gain_kp is not None:
             self._kp = float(gain_kp)
-        if gain_ki is not None:
-            self._ki = float(gain_ki)
-        if gain_kd is not None:
-            self._kd = float(gain_kd)
+        if gain_ti is not None:
+            self._ti = float(gain_ti)
+        if gain_td is not None:
+            self._td = float(gain_td)
         if gain_ke is not None:
             self._ke = float(gain_ke)
-        self._pid_controller.set_pid_param(self._kp, self._ki, self._kd, self._ke)
+        self._pid_controller.set_pid_param(self._kp, self._ti, self._td, self._ke)
+        await self._async_control_heating(calc_pid=True)
+
+    async def async_set_outdoor_sensor_offset(self, **kwargs):
+        """Set outdoor sensor offset."""
+        outdoor_sensor_offset = kwargs.get('outdoor_sensor_offset', None)
+        if outdoor_sensor_offset is not None:
+            self._outdoor_sensor_offset = float(outdoor_sensor_offset)
+        self._pid_controller.set_outdoor_sensor_offset(self._outdoor_sensor_offset)
         await self._async_control_heating(calc_pid=True)
 
     async def async_set_pid_mode(self, **kwargs):
@@ -878,7 +901,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
 
     async def _async_heater_turn_on(self):
         """Turn heater toggleable device on."""
-        if time.time() - self._last_heat_cycle_time >= self._min_off_cycle_duration.seconds:
+        if time.time() - self._last_off_time >= self._min_off_cycle_duration.seconds:
             data = {ATTR_ENTITY_ID: self._heater_entity_id}
             _LOGGER.info("Turning on %s for %s (%s)", self._heater_entity_id,
                          self.name, self.entity_id)
@@ -887,14 +910,14 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
             else:
                 service = SERVICE_TURN_ON
             await self.hass.services.async_call(HA_DOMAIN, service, data)
-            self._last_heat_cycle_time = time.time()
+            self._last_on_time = time.time()
         else:
             _LOGGER.info("Reject request turning on %s for %s (%s): Cycle is too short",
                          self._heater_entity_id, self.name, self.entity_id)
 
     async def _async_heater_turn_off(self, force=False):
         """Turn heater toggleable device off."""
-        if time.time() - self._last_heat_cycle_time >= self._min_on_cycle_duration.seconds or force:
+        if time.time() - self._last_on_time >= self._min_on_cycle_duration.seconds or force:
             data = {ATTR_ENTITY_ID: self._heater_entity_id}
             _LOGGER.info("Turning off %s for %s (%s)", self._heater_entity_id,
                          self.name, self.entity_id)
@@ -903,7 +926,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
             else:
                 service = SERVICE_TURN_OFF
             await self.hass.services.async_call(HA_DOMAIN, service, data)
-            self._last_heat_cycle_time = time.time()
+            self._last_off_time = time.time()
         else:
             _LOGGER.info("Reject request turning off %s for %s (%s): Cycle is too short",
                          self._heater_entity_id, self.name, self.entity_id)
@@ -952,17 +975,17 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
                     for tuning_rule in self._pid_autotune.tuning_rules:
                         params = self._pid_autotune.get_pid_parameters(tuning_rule)
                         _LOGGER.warning("Smart thermostat %s (%s) PID Autotuner output with %s "
-                                        "rule: Kp=%s, Ki=%s, Kd=%s", self.name, self.entity_id,
-                                        tuning_rule, params.Kp, params.Ki, params.Kd)
+                                        "rule: Kp=%s, Ti=%s, Td=%s", self.name, self.entity_id,
+                                        tuning_rule, params.Kp, params.Ti, params.Td)
                     params = self._pid_autotune.get_pid_parameters(self._autotune)
                     self._kp = params.Kp
-                    self._ki = params.Ki
-                    self._kd = params.Kd
+                    self._ti = params.Ti
+                    self._td = params.Td
                     _LOGGER.warning("Smart thermostat %s (%s) now runs on PID Controller using "
-                                    "rule %s: Kp=%s, Ki=%s, Kd=%s", self.name, self.entity_id,
-                                    self._autotune, self._kp, self._ki, self._kd)
-                    self._pid_controller = pid_controller.PID(self._kp, self._ki, self._kd,
-                                                              self._ke, self._min_out,
+                                    "rule %s: Kp=%s, Ti=%s, Td=%s", self.name, self.entity_id,
+                                    self._autotune, self._kp, self._ti, self._td)
+                    self._pid_controller = pid_controller.PID(self._kp, self._ti, self._td,
+                                                              self._ke, self._outdoor_sensor_offset, self._min_out,
                                                               self._max_out, self._sampling_period,
                                                               self._cold_tolerance,
                                                               self._hot_tolerance)

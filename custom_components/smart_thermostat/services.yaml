@@ -27,7 +27,7 @@ set_pid_mode:
             - 'off'
 set_pid_gain:
   name: Set PID gains
-  description: Sets the kp, ki and kd gains for the PID.
+  description: Sets the kp, ti and td gains for the PID.
   target:
     entity:
       integration: smart_thermostat
@@ -45,21 +45,21 @@ set_pid_gain:
           max: 1000000
           step: 0.001
           mode: box
-    ki:
-      name: Ki gain
-      description: Integral gain
+    ti:
+      name: Ti
+      description: Integral time
       required: false
       advanced: false
-      example: 0.007
+      example: 3600
       selector:
         number:
           min: 0
           max: 1000000
           step: 0.001
           mode: box
-    kd:
-      name: Kd gain
-      description: Derivative gain
+    td:
+      name: Td
+      description: Derivative time
       required: false
       advanced: false
       example: 345.12
@@ -79,6 +79,26 @@ set_pid_gain:
         number:
           min: 0
           max: 1000000
+          step: 0.001
+          mode: box
+set_outdoor_sensor_offset:
+  name: Set outdoor sensor offset
+  description: Sets the outdoor sensor offset.
+  target:
+    entity:
+      integration: smart_thermostat
+      domain: climate
+  fields:
+    outdoor_sensor_offset:
+      name: Outdoor sensor offset
+      description: Outdoor sensor offset (value is added to outdoor sensor).
+      required: false
+      advanced: false
+      example: 15.0
+      selector:
+        number:
+          min: -100
+          max: 100
           step: 0.001
           mode: box
 set_preset_temp:
