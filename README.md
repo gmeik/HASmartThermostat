@@ -213,7 +213,8 @@ in seconds, or time hh:mm:ss.
 * **ti** (Recommended): Set PID parameter, integral (i) time (float, default 0).
 * **td** (Recommended): Set PID parameter, derivative (d) time (float, default 0). 
 * **ke** (Optional): Set outdoor temperature compensation (e) gain(float, default 0). 
-* **outside_sensor_offset** (Optional): Set offset to outside temperature sensor, this value will be added.
+* **outside_sensor_offset** (Optional): Set offset to outside temperature sensor, this value will
+be added. You can use it to compensate for the baseline of heat released by electric applicances etc.
 * **pwm** (Optional): Set period of the pulse width modulation. If too long, the response time of 
 the thermostat will be too slow, leading to lower accuracy of temperature control. Can be float in 
 seconds or time hh:mm:ss (default 15mn). Set to 0 when using heater entity with direct input of 
