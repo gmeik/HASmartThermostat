@@ -349,7 +349,7 @@ ruler | Kp_divisor, Ki_divisor, Kd_divisor
 
 ### Credits
 This code is a fork from Smart Thermostat PID project:
-[https://github.com/ScratMan/HASmartThermostat]https://github.com/ScratMan/HASmartThermostat \
+[https://github.com/ScratMan/HASmartThermostat](https://github.com/ScratMan/HASmartThermostat) \
 The python PID module with Autotune is based on pid-autotune:
 [https://github.com/hirschmann/pid-autotune](https://github.com/hirschmann/pid-autotune)
 
