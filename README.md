@@ -47,8 +47,8 @@ climate:
       seconds: 60
     away_temp: 14
     kp: 5
-    ki: 0.01
-    kd: 500
+    ti: 100
+    td: 0
     pwm: 00:15:00
 ```
 
@@ -64,8 +64,8 @@ By default, the PID controller will be called each time the target sensor is upd
 main powered sensor with high sampling rate, the _sampling_period_ parameter should be used to slow 
 down the PID controller refresh rate.
 
-By adjusting the Kp, Ki and Kd gains, you can tune the system response to your liking. You can find 
-many tutorials for guidance on the web. Here are a few useful links:
+By adjusting the Kp, Ti and Td parameters, you can tune the system response to your liking. You can
+find  many tutorials for guidance on the web. Here are a few useful links:
 * [PID Control made easy](https://www.eurotherm.com/temperature-control/pid-control-made-easy/)
 * [Practical PID Process Dynamics with Proportional Pressure Controllers](
 https://clippard.com/cms/wiki/practical-pid-process-dynamics-proportional-pressure-controllers)
@@ -76,13 +76,14 @@ https://clippard.com/cms/wiki/practical-pid-process-dynamics-proportional-pressu
 To make it quick and simple:
 * Kp gain adjusts the proportional part of the error compensation. Higher values means 
 stronger reaction to error. Increase the value for faster rise time.
-* Ki gain adjusts the integral part. Integral compensates the residual error when temperature 
+* Ti time adjusts the integral part. Integral compensates the residual error when temperature 
 settles in a cumulative way. The longer the temperature remains below the set point, the higher the 
-integral compensation will be. If your system settles below the set point, increase the Ki value. 
-If it settles over the set point, decrease the Ki value.
-* Kd gain adjusts the derivative part of the compensation. Derivative compensates the inertia of 
-the system. If the sensor temperature increases quickly between two samples, the PID will decrease 
-the PWM level accordingly to limit the overshoot.
+integral compensation will be. If your system settles below the set point, decrease the Ti value. 
+If it settles over the set point, increase the Ti value.
+* Td time adjusts the derivative part of the compensation. Derivative compensates the inertia of 
+the system, but can create instability unless tuned carefully. If the sensor temperature increases
+quickly between two samples, the PID will decrease the PWM level accordingly to limit the overshoot.
+It is possible to use a proportional-integral controller (without derivative), by setting Td to 0.
 
 ![](https://upload.wikimedia.org/wikipedia/commons/4/43/PID_en.svg)
 
@@ -91,8 +92,8 @@ PID output value is the weighted sum of the control terms:\
 `di = ` temperature change between last two samples\
 `dt = ` time elapsed between last two samples\
 `P = Kp * error`\
-`I = last_I + (Ki * error * dt)`\
-`D = -(Kd * di) / dt`\
+`I = last_I + (Kp / Ti * error * dt)`\
+`D = -(Kp * Td * di) / dt`\
 `output = P + I + D`\
 Output is then limited to 0% to 100% range to control the PWM.
 
@@ -104,9 +105,10 @@ for by adding an offset to the outdoor sensor. An external component E is added 
 `E = Ke * (target_temp - (outdoor_temp + outdoor_sensor_offset))`\
 `output = P + I + D + E`\
 Output is then limited to 0% to 100% range to control the PWM.
-The Ke gain depends on the insulation of the building, on recent buildings with good insulation, a 
-gain of 0.6 is recommended. This compensation will act like the integral of the PID, but with 
-faster response time, so the integral will be more stable.
+The Ke gain depends on the insulation of the building and the power of the heater. A good approximation
+can be found by making an XY-plot of the daily (or monthly) heating energy consumption versus the
+daily (or monthly) outdoor temperature. The slope of the line then can be converted into a gain. This
+compensation will act like the integral of the PID, but with faster response time, so the integral will be more stable.
 
 ### Autotune (not always working, not recommended to use):
 You can use the autotune feature to find some working PID parameters.\
@@ -151,7 +153,7 @@ Example:
 service: smart_thermostat.set_pid_gain
 data:
   kp: 11.8
-  ki: 0.00878
+  ki: 120
 target:
   entity_id: climate.smart_thermostat_example
 ```
@@ -347,7 +349,7 @@ ruler | Kp_divisor, Ki_divisor, Kd_divisor
 
 ### Credits
 This code is a fork from Smart Thermostat PID project:
-[https://github.com/aendle/custom_components](https://github.com/aendle/custom_components) \
+[https://github.com/ScratMan/HASmartThermostat]https://github.com/ScratMan/HASmartThermostat \
 The python PID module with Autotune is based on pid-autotune:
 [https://github.com/hirschmann/pid-autotune](https://github.com/hirschmann/pid-autotune)
 
