@@ -209,10 +209,11 @@ must be temperature.
 * **keep_alive** (Required): sets update interval for the PWM pulse width. If interval is too big, 
 the PWM granularity will be reduced, leading to lower accuracy of temperature control, can be float 
 in seconds, or time hh:mm:ss.
-* **kp** (Recommended): Set PID parameter, proportional (p) control value (float, default 100).
-* **ki** (Recommended): Set PID parameter, integral (i) control value (float, default 0).
-* **kd** (Recommended): Set PID parameter, derivative (d) control value (float, default 0). 
-* **ke** (Optional): Set outdoor temperature compensation gain (e) control value (float, default 0). 
+* **kp** (Recommended): Set PID parameter, proportional (p) gain (float, default 100).
+* **ti** (Recommended): Set PID parameter, integral (i) time (float, default 0).
+* **td** (Recommended): Set PID parameter, derivative (d) time (float, default 0). 
+* **ke** (Optional): Set outdoor temperature compensation (e) gain(float, default 0). 
+* **outside_sensor_offset** (Optional): Set offset to outside temperature sensor, this value will be added.
 * **pwm** (Optional): Set period of the pulse width modulation. If too long, the response time of 
 the thermostat will be too slow, leading to lower accuracy of temperature control. Can be float in 
 seconds or time hh:mm:ss (default 15mn). Set to 0 when using heater entity with direct input of 
