@@ -1,6 +1,6 @@
 """Adds support for smart (PID) thermostat units.
 For more details about this platform, please refer to the documentation at
-https://github.com/ScratMan/HASmartThermostat"""
+https://github.com/gmeik/HASmartThermostat"""
 
 import asyncio
 import logging
@@ -198,6 +198,13 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
             vol.Optional("ke"): vol.Coerce(float),
         },
         "async_set_pid",
+    )
+    platform.async_register_entity_service(  # type: ignore
+        "set_pwm",
+        {
+            vol.Optional("pwm"): vol.Coerce(float),
+        },
+        "async_set_pwm",
     )
     platform.async_register_entity_service(  # type: ignore
         "set_outdoor_sensor_offset",
@@ -440,6 +447,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
             elif old_state.attributes.get('Ke') is not None and self._pid_controller is not None:
                 self._ke = float(old_state.attributes.get('Ke'))
                 self._pid_controller.set_pid_param(ke=self._ke)
+            if old_state.attributes.get('pwm') is not None:
+                self._pwm = float(old_state.attributes.get('pwm'))
             if old_state.attributes.get('outdoor_sensor_offset') is not None and self._pid_controller is not None:
                 self._outdoor_sensor_offset = float(old_state.attributes.get('outdoor_sensor_offset'))
                 self._pid_controller.set_outdoor_sensor_offset(outdoor_sensor_offset=self._outdoor_sensor_offset)
@@ -631,6 +640,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
             "ti": self._ti,
             "td": self._td,
             "ke": self._ke,
+            "pwm": self._pwm,
             "outdoor_sensor_offset": self._outdoor_sensor_offset,
             "pid_mode": self.pid_mode,
             "pid_i": 0 if self._autotune != "none" else self.pid_control_i,
@@ -718,6 +728,11 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
         if gain_ke is not None:
             self._ke = float(gain_ke)
         self._pid_controller.set_pid_param(self._kp, self._ti, self._td, self._ke)
+        await self._async_control_heating(calc_pid=True)
+
+    async def async_set_pwm(self, **kwargs):
+        """Set PID parameters."""
+        pid_pwm = kwargs.get('pwm', None)
         await self._async_control_heating(calc_pid=True)
 
     async def async_set_outdoor_sensor_offset(self, **kwargs):
