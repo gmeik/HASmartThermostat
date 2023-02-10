@@ -58,18 +58,17 @@ class PID:
         self._input_time = None
         self._last_input = None
         self._last_input_time = None
-        self.error = 0
+        self._error = 0
         self._input_diff = 0
-        self.dext = 0
-        self.dt = 0
+        self._dext = 0
+        self._dt = 0
         self._last_output = 0
-        self.output = 0
-        self.P = 0
-        self.I = 0
-        self.D = 0
-        self.E = 0
+        self._output = 0
+        self._proportional = 0
+        self._derivative = 0
+        self._external = 0
         self._mode = 'AUTO'
-        self.sampling_period = sampling_period
+        self._sampling_period = sampling_period
         self._cold_tolerance = cold_tolerance
         self._hot_tolerance = hot_tolerance
 
@@ -83,6 +82,18 @@ class PID:
         self._mode = mode.upper()
 
     @property
+    def sampling_period(self):
+        return self._sampling_period
+
+    @property
+    def error(self):
+        return self._error
+
+    @property
+    def proportional(self):
+        return self._proportional
+
+    @property
     def integral(self):
         return self._integral
 
@@ -90,7 +101,18 @@ class PID:
     def integral(self, i):
         assert isinstance(i, float), "Integral should be a float"
         self._integral = i
-        self.I = i
+
+    @property
+    def derivative(self):
+        return self._derivative
+
+    @property
+    def external(self):
+        return self._external
+
+    @property
+    def dt(self):
+        return self._dt
 
     def set_pid_param(self, kp=None, ti=None, td=None, ke=None):
         """Set PID parameters."""
@@ -130,20 +152,20 @@ class PID:
         Returns:
             A value between `out_min` and `out_max`.
         """
-        if self.sampling_period != 0 and self._last_input_time is not None and \
-                time() - self._input_time < self.sampling_period:
-            return self.output, False  # If last sample is too young, keep last output value
+        if self._sampling_period != 0 and self._last_input_time is not None and \
+                time() - self._input_time < self._sampling_period:
+            return self._output, False  # If last sample is too young, keep last output value
 
         self._last_input = self._input
-        if self.sampling_period == 0:
+        if self._sampling_period == 0:
             self._last_input_time = last_input_time
         else:
             self._last_input_time = self._input_time
-        self._last_output = self.output
+        self._last_output = self._output
 
         # Refresh with actual values
         self._input = input_val
-        if self.sampling_period == 0:
+        if self._sampling_period == 0:
             self._input_time = input_time
         else:
             self._input_time = time()
@@ -152,30 +174,30 @@ class PID:
 
         if self.mode == 'OFF':  # If PID is off, simply switch between min and max output
             if input_val <= set_point - self._cold_tolerance:
-                self.output = self._out_max
+                self._output = self._out_max
                 _LOGGER.debug("PID is off and input lower than set point: heater ON")
-                return self.output, True
+                return self._output, True
             elif input_val >= set_point + self._hot_tolerance:
-                self.output = self._out_min
+                self._output = self._out_min
                 _LOGGER.debug("PID is off and input higher than set point: heater OFF")
-                return self.output, True
+                return self._output, True
             else:
-                return self.output, False
+                return self._output, False
 
         # Compute all the working error variables
-        self.error = set_point - input_val
+        self._error = set_point - input_val
         if self._last_input is not None:
             self._input_diff = self._input - self._last_input
         else:
             self._input_diff = 0
         if self._last_input_time is not None:
-            self.dt = self._input_time - self._last_input_time
+            self._dt = self._input_time - self._last_input_time
         else:
-            self.dt = 0
+            self._dt = 0
         if ext_temp is not None:
-            self.dext = set_point - (ext_temp + self._outdoor_sensor_offset)
+            self._dext = set_point - (ext_temp + self._outdoor_sensor_offset)
         else:
-            self.dext = 0
+            self._dext = 0
 
         # In order to prevent windup, only integrate if the process is not saturated and set point
         # is stable
@@ -184,27 +206,19 @@ class PID:
             self._integral += self._Kp / self._Ti * self.error * self.dt
             self._integral = max(min(self._integral, self._out_max), self._out_min)
 
-        self.P = self._Kp * self.error
-        self.I = self._integral
+        self._proportional = self._Kp * self.error
+        self._integral = self._integral
         if self.dt != 0:
-            self.D = -(self._Kp * self._Td * self._input_diff) / self.dt
+            self._derivative = -(self._Kp * self._Td * self._input_diff) / self.dt
         else:
-            self.D = 0.0
+            self._derivative = 0.0
         # Compensate losses due to external temperature
-        self.E = self._Ke * self.dext
+        self._external = self._Ke * self.dext
 
         # Compute PID Output
-        output = self.P + self.I + self.D + self.E
-        self.output = max(min(output, self._out_max), self._out_min)
-
-        # Log some debug info
-        _LOGGER.debug('P: %.2f', self.P)
-        _LOGGER.debug('I: %.2f', self.I)
-        _LOGGER.debug('D: %.2f', self.D)
-        _LOGGER.debug('E: %.2f', self.E)
-        _LOGGER.debug('output: %.2f', self.output)
-
-        return self.output, True
+        output = self._proportional + self._integral + self._derivative + self._external
+        self._output = max(min(output, self._out_max), self._out_min)
+        return self._output, True
 
 
 # Based on a fork of Arduino PID AutoTune Library
