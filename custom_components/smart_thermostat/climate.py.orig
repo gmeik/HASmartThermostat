@@ -202,9 +202,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     platform.async_register_entity_service(  # type: ignore
         "set_pwm",
         {
-            vol.Optional("pwm"): vol.All(
-                cv.time_period, cv.positive_timedelta
-            ),
+            vol.Optional("pwm"): vol.Coerce(float),
         },
         "async_set_pwm",
     )
@@ -363,9 +361,15 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
                             "after doesn't have any effect until autotuning is finished",
                             self.unique_id)
         else:
+<<<<<<< HEAD
             _LOGGER.debug("PID Gains for %s (%s): kp = %s, ti = %s, td = %s", self._name,
                           self._unique_id, self._kp, self._ti, self._td)
             self._pid_controller = pid_controller.PID(self._kp, self._ti, self._td, self._ke, self._outdoor_sensor_offset,
+=======
+            _LOGGER.debug("%s: PID Gains kp = %s, ki = %s, kd = %s", self.unique_id, self._kp,
+                          self._ki, self._kd)
+            self._pid_controller = pid_controller.PID(self._kp, self._ki, self._kd, self._ke,
+>>>>>>> 1915fdc5332af01801517810abaca0c6bfefd432
                                                       self._min_out, self._max_out,
                                                       self._sampling_period, self._cold_tolerance,
                                                       self._hot_tolerance)
@@ -755,10 +759,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
         await self._async_control_heating(calc_pid=True)
 
     async def async_set_pwm(self, **kwargs):
-        """Set PWM interval."""
-        pwm = kwargs.get('pwm', None)
-        if pwm is not None:
-            self._pwm = pwm.seconds
+        """Set PID parameters."""
+        pid_pwm = kwargs.get('pwm', None)
         await self._async_control_heating(calc_pid=True)
 
     async def async_set_outdoor_sensor_offset(self, **kwargs):
@@ -1013,6 +1015,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
                 if self._pid_autotune.run(self._current_temp, self._target_temp):
                     for tuning_rule in self._pid_autotune.tuning_rules:
                         params = self._pid_autotune.get_pid_parameters(tuning_rule)
+<<<<<<< HEAD
                         _LOGGER.warning("Smart thermostat %s (%s) PID Autotuner output with %s "
                                         "rule: Kp=%s, Ti=%s, Td=%s", self.name, self.entity_id,
                                         tuning_rule, params.Kp, params.Ti, params.Td)
@@ -1025,6 +1028,20 @@ class SmartThermostat(ClimateEntity, RestoreEntity, ABC):
                                     self._autotune, self._kp, self._ti, self._td)
                     self._pid_controller = pid_controller.PID(self._kp, self._ti, self._td,
                                                               self._ke, self._outdoor_sensor_offset, self._min_out,
+=======
+                        _LOGGER.warning("%s: Now running PID Autotuner with rule %s"
+                                        ": Kp=%s, Ki=%s, Kd=%s", self.entity_id,
+                                        tuning_rule, params.Kp, params.Ki, params.Kd)
+                    params = self._pid_autotune.get_pid_parameters(self._autotune)
+                    self._kp = params.Kp
+                    self._ki = params.Ki
+                    self._kd = params.Kd
+                    _LOGGER.warning("%s: Now running on PID Controller using "
+                                    "rule %s: Kp=%s, Ki=%s, Kd=%s", self.entity_id,
+                                    self._autotune, self._kp, self._ki, self._kd)
+                    self._pid_controller = pid_controller.PID(self._kp, self._ki, self._kd,
+                                                              self._ke, self._min_out,
+>>>>>>> 1915fdc5332af01801517810abaca0c6bfefd432
                                                               self._max_out, self._sampling_period,
                                                               self._cold_tolerance,
                                                               self._hot_tolerance)

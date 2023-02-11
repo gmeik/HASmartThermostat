@@ -91,15 +91,14 @@ set_pwm:
   fields:
     pwm:
       name: PWM
-      description: PWM interval (seconds)
+      description: PWM interval
       required: false
       advanced: false
       example: 
       selector:
-        number:
-          min: 0
-          max: 1000000
-          step: 0.1
+        duration:
+          min: 00:00:01
+          max: 24:00:00
           mode: box
 set_outdoor_sensor_offset:
   name: Set outdoor sensor offset

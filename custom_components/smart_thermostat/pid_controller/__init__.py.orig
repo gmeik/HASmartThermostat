@@ -51,7 +51,9 @@ class PID:
         self._outdoor_sensor_offset = outdoor_sensor_offset
         self._out_min = out_min
         self._out_max = out_max
+        self._proportional = 0.0
         self._integral = 0.0
+        self._derivative = 0.0
         self._last_set_point = 0
         self._set_point = 0
         self._input = None
@@ -195,7 +197,11 @@ class PID:
         else:
             self._dt = 0
         if ext_temp is not None:
-            self._dext = set_point - (ext_temp + self._outdoor_sensor_offset)
+<<<<<<< HEAD
+            self.dext = set_point - (ext_temp + self._outdoor_sensor_offset)
+=======
+            self._dext = set_point - ext_temp
+>>>>>>> 1915fdc5332af01801517810abaca0c6bfefd432
         else:
             self._dext = 0
 
@@ -203,13 +209,22 @@ class PID:
         # is stable
         if self._out_min < self._last_output < self._out_max and \
                 self._last_set_point == self._set_point:
+<<<<<<< HEAD
             self._integral += self._Kp / self._Ti * self.error * self.dt
             self._integral = max(min(self._integral, self._out_max), self._out_min)
 
-        self._proportional = self._Kp * self.error
-        self._integral = self._integral
+        self.P = self._Kp * self.error
+        self.I = self._integral
         if self.dt != 0:
-            self._derivative = -(self._Kp * self._Td * self._input_diff) / self.dt
+            self.D = -(self._Kp * self._Td * self._input_diff) / self.dt
+=======
+            self._integral += self._Ki * self._error * self._dt
+            self._integral = max(min(self._integral, self._out_max), self._out_min)
+
+        self._proportional = self._Kp * self._error
+        if self._dt != 0:
+            self._derivative = -(self._Kd * self._input_diff) / self._dt
+>>>>>>> 1915fdc5332af01801517810abaca0c6bfefd432
         else:
             self._derivative = 0.0
         # Compensate losses due to external temperature
